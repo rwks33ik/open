@@ -1,5 +1,4 @@
-[file name]: server.js
-[file content begin]
+
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
