@@ -24,7 +24,7 @@ const upload = multer({ storage: storage });
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 // إعدادات المجموعة - تم تحديثها حسب طلبك
-const TARGET_GROUP_ID = "2492307094"; // تم التحديث إلى ID العادي
+const TARGET_GROUP_ID = "-1002492307094"; // تم التحديث إلى ID العادي
 const TARGET_GROUP_LINK = "https://t.me/+Ulu5SHgJAgYzYmJk";
 
 // التحقق من وجود التوكن
